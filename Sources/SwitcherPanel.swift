@@ -1,11 +1,21 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Floating, non-activating panel listing app names.
-/// It can become key (to receive Esc) without activating our app.
+/// Floating, non-activating panel listing app names with one selected row.
+/// It can become key (to receive keys) without activating our app.
 @MainActor
 final class SwitcherPanel: NSPanel {
+    /// Called with the selected row index when the user confirms.
+    var onCommit: ((Int) -> Void)?
+    /// Called when the panel closes without choosing (Esc, click outside).
+    var onCancel: (() -> Void)?
+
+    private(set) var isShowing = false
+    private(set) var selectedIndex = 0
+
     private let stackView = NSStackView()
+    private var rows: [NSView] = []
+    private var labels: [NSTextField] = []
     private let minWidth: CGFloat = 280
 
     init() {
@@ -34,8 +44,8 @@ final class SwitcherPanel: NSPanel {
 
         stackView.orientation = .vertical
         stackView.alignment = .leading
-        stackView.spacing = 6
-        stackView.edgeInsets = NSEdgeInsets(top: 14, left: 18, bottom: 14, right: 18)
+        stackView.spacing = 2
+        stackView.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         background.addSubview(stackView)
@@ -49,60 +59,134 @@ final class SwitcherPanel: NSPanel {
         contentView = background
     }
 
-    // Borderless windows refuse key status by default; we need it to receive Esc.
+    // Borderless windows refuse key status by default; we need it to receive keys.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    func show(appNames: [String]) {
-        stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let names = appNames.isEmpty ? ["(no apps)"] : appNames
-        for name in names {
-            let label = NSTextField(labelWithString: name)
-            label.font = .systemFont(ofSize: 15)
-            label.lineBreakMode = .byTruncatingTail
-            stackView.addArrangedSubview(label)
+    // MARK: - Showing
+
+    func show(names: [String], selectedIndex: Int, fontSize: CGFloat, on screen: NSScreen?) {
+        rows.forEach { $0.removeFromSuperview() }
+        rows = []
+        labels = []
+
+        let items = names.isEmpty ? ["(no apps)"] : names
+        for name in items {
+            let (row, label) = makeRow(name, fontSize: fontSize)
+            stackView.addArrangedSubview(row)
+            // Full-width rows so the selection highlight spans the panel.
+            row.leadingAnchor.constraint(equalTo: stackView.leadingAnchor, constant: 8).isActive = true
+            row.trailingAnchor.constraint(equalTo: stackView.trailingAnchor, constant: -8).isActive = true
+            rows.append(row)
+            labels.append(label)
         }
+        self.selectedIndex = min(max(selectedIndex, 0), items.count - 1)
+        updateHighlight()
 
         if let contentView {
             contentView.layoutSubtreeIfNeeded()
             setContentSize(contentView.fittingSize)
         }
-        centerOnMouseScreen()
+        center(on: screen)
+        isShowing = true
         makeKeyAndOrderFront(nil)
     }
 
-    func dismiss() {
-        guard isVisible else { return }
-        orderOut(nil)
+    private func makeRow(_ text: String, fontSize: CGFloat) -> (NSView, NSTextField) {
+        let row = NSView()
+        row.wantsLayer = true
+        row.layer?.cornerRadius = 6
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: fontSize)
+        label.lineBreakMode = .byTruncatingTail
+        label.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 10),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor, constant: -10),
+            label.topAnchor.constraint(equalTo: row.topAnchor, constant: 4),
+            label.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -4),
+        ])
+        return (row, label)
     }
 
-    /// Phase 1 uses the screen under the mouse pointer (refined in phase 3).
-    private func centerOnMouseScreen() {
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
-        guard let area = screen?.visibleFrame else { return }
+    /// The caller picks the screen (mouse or focused window, per config).
+    private func center(on screen: NSScreen?) {
+        guard let area = (screen ?? NSScreen.main)?.visibleFrame else { return }
         let origin = NSPoint(x: area.midX - frame.width / 2, y: area.midY - frame.height / 2)
         setFrameOrigin(NSPoint(x: origin.x.rounded(), y: origin.y.rounded()))
     }
 
+    // MARK: - Selection
+
+    /// Moves the selection, wrapping around at both ends (like Cmd+Tab).
+    func moveSelection(by delta: Int) {
+        guard isShowing, !rows.isEmpty else { return }
+        let count = rows.count
+        selectedIndex = ((selectedIndex + delta) % count + count) % count
+        updateHighlight()
+    }
+
+    private func updateHighlight() {
+        for (index, row) in rows.enumerated() {
+            let selected = index == selectedIndex
+            row.layer?.backgroundColor = selected ? NSColor.selectedContentBackgroundColor.cgColor : nil
+            labels[index].textColor = selected ? .alternateSelectedControlTextColor : .labelColor
+        }
+    }
+
     // MARK: - Closing
 
+    func commit() {
+        guard finish() else { return }
+        onCommit?(selectedIndex)
+    }
+
+    func cancel() {
+        guard finish() else { return }
+        onCancel?()
+    }
+
+    /// Returns false if already closed. Clears `isShowing` before `orderOut`, which triggers
+    /// `resignKey` re-entrantly: that call then becomes a no-op.
+    private func finish() -> Bool {
+        guard isShowing else { return false }
+        isShowing = false
+        orderOut(nil)
+        return true
+    }
+
+    // MARK: - Keyboard
+
     override func keyDown(with event: NSEvent) {
-        if Int(event.keyCode) == kVK_Escape {
-            dismiss()
-        } else {
-            super.keyDown(with: event)
+        switch Int(event.keyCode) {
+        case kVK_Escape:
+            cancel()
+        case kVK_Return, kVK_ANSI_KeypadEnter:
+            commit()
+        case kVK_DownArrow:
+            moveSelection(by: 1)
+        case kVK_UpArrow:
+            moveSelection(by: -1)
+        case kVK_Tab:
+            // Plain Tab when opened from the menu; also catches Shift+Option+Tab if
+            // that hotkey never reaches us (the panel is key, so the key lands here).
+            moveSelection(by: event.modifierFlags.contains(.shift) ? -1 : 1)
+        default:
+            break // swallow other keys (no beep)
         }
     }
 
     // Esc can also arrive as the standard "cancel" action.
     override func cancelOperation(_ sender: Any?) {
-        dismiss()
+        cancel()
     }
 
-    // Clicking another app (or anywhere outside) takes key status away: close.
+    // Clicking another app (or anywhere outside) takes key status away: cancel.
     override func resignKey() {
         super.resignKey()
-        dismiss()
+        cancel()
     }
 }

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5782E3C0CC3D3CE240B475B7 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4700BE8ECBAE8B65C6980E00 /* AppDelegate.swift */; };
+		5A3514552D03E1141810AD6B /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BC9637D40BCAAC94A3FDD07 /* Config.swift */; };
 		60F29B378313E62A06EAC79E /* SwitcherPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472209E14D736C050343FD8F /* SwitcherPanel.swift */; };
 		86994EC8A7F245ADA3D262F6 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18DDE323DD8803396450BF06 /* main.swift */; };
 		AC0ABA600106B760EF6CC34A /* HotKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 444926C63009C41CF7ABAE23 /* HotKey.swift */; };
@@ -19,6 +20,7 @@
 		444926C63009C41CF7ABAE23 /* HotKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKey.swift; sourceTree = "<group>"; };
 		4700BE8ECBAE8B65C6980E00 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		472209E14D736C050343FD8F /* SwitcherPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanel.swift; sourceTree = "<group>"; };
+		6BC9637D40BCAAC94A3FDD07 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -34,6 +36,7 @@
 			isa = PBXGroup;
 			children = (
 				4700BE8ECBAE8B65C6980E00 /* AppDelegate.swift */,
+				6BC9637D40BCAAC94A3FDD07 /* Config.swift */,
 				444926C63009C41CF7ABAE23 /* HotKey.swift */,
 				18DDE323DD8803396450BF06 /* main.swift */,
 				472209E14D736C050343FD8F /* SwitcherPanel.swift */,
@@ -109,6 +112,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5782E3C0CC3D3CE240B475B7 /* AppDelegate.swift in Sources */,
+				5A3514552D03E1141810AD6B /* Config.swift in Sources */,
 				AC0ABA600106B760EF6CC34A /* HotKey.swift in Sources */,
 				60F29B378313E62A06EAC79E /* SwitcherPanel.swift in Sources */,
 				86994EC8A7F245ADA3D262F6 /* main.swift in Sources */,

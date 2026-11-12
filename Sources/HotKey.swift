@@ -7,12 +7,19 @@ final class HotKey {
     /// Four-char code 'STSW' identifying our hotkeys inside the Carbon event.
     nonisolated static let signature: OSType = 0x5354_5357
 
+    private static var nextID: UInt32 = 1
+
+    /// Distinguishes this hotkey from others: every handler on the application target
+    /// sees every hotkey event, so each one must only react to its own ID.
+    let id: UInt32
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private let action: () -> Void
 
     init?(keyCode: UInt32, modifiers: UInt32, action: @escaping () -> Void) {
         self.action = action
+        self.id = HotKey.nextID
+        HotKey.nextID += 1
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                       eventKind: UInt32(kEventHotKeyPressed))
@@ -23,7 +30,7 @@ final class HotKey {
                                                 1, &eventType, userData, &handlerRef)
         guard installStatus == noErr else { return nil }
 
-        let hotKeyID = EventHotKeyID(signature: HotKey.signature, id: 1)
+        let hotKeyID = EventHotKeyID(signature: HotKey.signature, id: id)
         let registerStatus = RegisterEventHotKey(keyCode, modifiers, hotKeyID,
                                                  GetApplicationEventTarget(), 0, &hotKeyRef)
         guard registerStatus == noErr else {
@@ -40,8 +47,11 @@ final class HotKey {
         handlerRef = nil
     }
 
-    fileprivate func fire() {
+    /// Returns false if the event belongs to another HotKey.
+    fileprivate func handle(id receivedID: UInt32) -> Bool {
+        guard receivedID == id else { return false }
         action()
+        return true
     }
 }
 
@@ -68,9 +78,11 @@ nonisolated private func hotKeyEventHandler(_ nextHandler: EventHandlerCallRef?,
     // Convert the raw pointer back to the object *before* entering the isolated closure
     // (a raw pointer is not Sendable; the MainActor class is).
     let hotKey = Unmanaged<HotKey>.fromOpaque(userData).takeUnretainedValue()
+    let id = receivedID.id
     // Carbon dispatches application-target events on the main thread.
-    MainActor.assumeIsolated {
-        hotKey.fire()
+    let handled = MainActor.assumeIsolated {
+        hotKey.handle(id: id)
     }
-    return noErr
+    // eventNotHandledErr lets the event continue to the next handler (another HotKey).
+    return handled ? noErr : OSStatus(eventNotHandledErr)
 }
